@@ -1,0 +1,8 @@
+name: DeathChest
+main: deathchest.DeathChest
+version: 2.0
+api-version: 1.13
+commands:
+  deaths:
+      description: Shows death locations
+      usage: /deaths [player]
