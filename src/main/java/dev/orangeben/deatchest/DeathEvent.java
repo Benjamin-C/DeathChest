@@ -12,6 +12,7 @@ import java.util.UUID;
 import java.util.logging.Level;
 
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -46,6 +47,9 @@ public class DeathEvent implements Listener {
 		BukkitScheduler scheduler = Bukkit.getScheduler();
 		scheduler.runTaskLater(plugin, () -> {
 			Location loc = p.getLocation();
+            if(loc.getY() < loc.getWorld().getMinHeight()) {
+                loc.setY(loc.getWorld().getMinHeight());
+            }
 			Block chest0block = loc.getBlock();
 //			List<ItemStack> is = fis;
 			
@@ -98,7 +102,7 @@ public class DeathEvent implements Listener {
 					Inventory chest0inv = chest0.getInventory();
 					int chest0size = chest0inv.getSize();
 					
-					chest0.setCustomName(p.getName() + " " + date);
+					chest0.setCustomName(ChatColor.RED + p.getName() + " " + date);
 					chest0.update();
 					
 					Chest chest1 = null;
