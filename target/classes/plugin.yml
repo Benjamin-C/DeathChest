@@ -1,0 +1,8 @@
+name: DeathChest
+main: dev.orangeben.deatchest.DeathChest
+version: 3.0
+api-version: 1.18
+commands:
+  deaths:
+      description: Shows death locations
+      usage: /deaths [player]
