@@ -17,12 +17,18 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.Chest;
+import org.bukkit.block.ShulkerBox;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.ItemMergeEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.BlockStateMeta;
+import org.bukkit.inventory.meta.BundleMeta;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitScheduler;
 
@@ -40,6 +46,7 @@ public class DeathEvent implements Listener {
 	public void onDeath(PlayerDeathEvent evt) {
 		final Player p = evt.getEntity();
 		List<ItemStack> is = new ArrayList<ItemStack>();
+        
 		for(ItemStack i : evt.getDrops()) {
 			is.add(i);
 		}
@@ -64,8 +71,8 @@ public class DeathEvent implements Listener {
 			int chest1stacks = 0;
 			int dropCount = is.size();
 			int dropStacks = 0;
-			int tmploc = 0;
 			int inChest = 0;
+            String invSummary = " [";
 			
 			for(ItemStack s : is) {
 				if(s != null) {
@@ -139,30 +146,43 @@ public class DeathEvent implements Listener {
 					chest1stacks = 0;
 					dropCount = 0;
 					dropStacks = 0;
-					tmploc = 0;
-					ItemStack tmp = null;
 					// Put the stuff in the chests or throw it on the floor
 					for(int i = 0; i < stuff; i++) {
+                        ItemStack toDrop = is.remove(0);
+
+                        // Log the item
+                        if(i > 1) {
+                            invSummary += ",";
+                        }
+                        try {
+                            invSummary += isToJSON(toDrop);
+                        } catch (Exception e) {
+                            // TODO: handle exception
+                            plugin.getLogger().severe(e.getMessage());
+                            e.printStackTrace();
+                        }
+
 						// Put it in chest0 first
 						if(i < chest0size) {
-							tmp = is.remove(0);
-							chest0inv.addItem(tmp);
+							chest0inv.addItem(toDrop);
 							chest0stacks++;
-							chest0count = chest0count + tmp.getAmount();
+							chest0count += toDrop.getAmount();
 						// Then put remaining stuff in chest1
 						} else if(chest1 != null && i < chest0size + chest1size) {
-							tmp = is.remove(0);
-							chest1inv.addItem(tmp);
+							chest1inv.addItem(toDrop);
 							chest1stacks++;
-							chest1count = chest0count + tmp.getAmount();
+							chest1count += toDrop.getAmount();
 						// Finally throw anything else on the floor
 						//Should only be used if there is no chest1
 						} else if(i >= chest0size + chest1size) {
 							dropStacks++;
-							dropCount = dropCount + is.get(tmploc++).getAmount();
-							loc.getWorld().dropItem(loc, is.remove(0));
-						}
+							dropCount += toDrop.getAmount();
+							loc.getWorld().dropItem(loc, toDrop);
+						} else {
+                            plugin.getLogger().severe("Should have dropped " + toDrop.getAmount() + "x " + toDrop.getType() + " but didn't");
+                        }
 					}
+                    invSummary += "]";
 					
 					// Tell the player where they died
 					inChest = chest0count + chest1count;
@@ -208,7 +228,7 @@ public class DeathEvent implements Listener {
 			plugin.getLogger().log(Level.INFO, msg);
 			
 			// Log the death location to a file
-			String dta = date + " " + loc.getBlockX() + " " + loc.getBlockY() + " " + loc.getBlockZ();
+			String dta = date + " " + loc.getBlockX() + " " + loc.getBlockY() + " " + loc.getBlockZ() + invSummary;
 			saveData(p.getName(), p.getUniqueId(), dta);
 		}, 1);
 	}
@@ -260,4 +280,77 @@ public class DeathEvent implements Listener {
 			return str + "s";
 		}
 	}
+
+    private String isToJSON(ItemStack is) {
+        if(is == null) {
+            return "{}";
+        }
+        String s = String.format("{\"type\":\"%s\",\"qty\":%d", is.getType(), is.getAmount());
+        if(is.hasItemMeta()) {
+            ItemMeta im = is.getItemMeta();
+            if(im.hasDisplayName()) {
+                s += ",\"name\":" + im.getDisplayName().replace("\"", "\\\"") + "\"";
+            }
+            if(im.hasLore()) {
+                s += ",\"lore\":[";
+                boolean lore1 = true;
+                for(String line : im.getLore()) {
+                    if(lore1) {
+                        lore1 = false;
+                    } else {
+                        s += ",";
+                    }
+                    s += "\"" + line.replace("\"", "\\\"") + "\"";
+                }
+                s += "]";
+            }
+            if(im.hasEnchants()) {
+                s += ",\"enchantments\":[";
+                boolean ench1 = true;
+                for(Enchantment e : im.getEnchants().keySet()) {
+                    if(ench1) {
+                        ench1 = false;
+                    } else {
+                        s += ",";
+                    }
+                    s += String.format("{\"name\":\"%s\",\"level\":%d}", e.getKey(), im.getEnchantLevel(e));
+                }
+                s += "]";
+            }
+            if(im instanceof BlockStateMeta) {
+                BlockStateMeta bsm = (BlockStateMeta) is.getItemMeta();
+                if(bsm.getBlockState() instanceof ShulkerBox){
+                    ShulkerBox sb = (ShulkerBox) bsm.getBlockState();
+                    s += ",\"inventory\":[";
+                    boolean inv1 = true;
+                    for(ItemStack iis : sb.getInventory()) {
+                        if(inv1) {
+                            inv1 = false;
+                        } else {
+                            s += ",";
+                        }
+                        s += isToJSON(iis);
+                    }
+                    s += "]";
+                }
+            }
+            if(im instanceof BundleMeta) {
+                BundleMeta bundle = (BundleMeta) im;
+                s += ",\"inventory\":[";
+                boolean inv1 = true;
+                for(ItemStack iis : bundle.getItems()) {
+                    if(inv1) {
+                        inv1 = false;
+                    } else {
+                        s += ",";
+                    }
+                    s += isToJSON(iis);
+                }
+                s += "]";
+    
+            }
+        }
+        s += "}";
+        return s;
+    }
 }
