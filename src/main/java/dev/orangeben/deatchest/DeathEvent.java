@@ -69,17 +69,30 @@ public class DeathEvent implements Listener {
 			int chest0stacks = 0;
 			int chest1count = 0;
 			int chest1stacks = 0;
-			int dropCount = is.size();
-			int dropStacks = 0;
+			int dropCount = 0;
+			int dropStacks = is.size();
 			int inChest = 0;
-            String invSummary = " [";
+			int inChestStacks = 0;
+            StringBuilder invSummary = new StringBuilder();
 			
 			for(ItemStack s : is) {
 				if(s != null) {
 					stuff++;
+					dropCount += s.getAmount();
+					// Log the item
+					if(!invSummary.isEmpty()) {
+						invSummary.append(",");
+					}
+					try {
+						invSummary.append(isToJSON(s));
+					} catch (Exception e) {
+						// TODO: handle exception
+						plugin.getLogger().severe(e.getMessage());
+						e.printStackTrace();
+					}
 				}
 			}
-			
+
 			if(stuff > 0) {
 				int rep = 0;
 				int testY = 0;
@@ -150,18 +163,6 @@ public class DeathEvent implements Listener {
 					for(int i = 0; i < stuff; i++) {
                         ItemStack toDrop = is.remove(0);
 
-                        // Log the item
-                        if(i > 1) {
-                            invSummary += ",";
-                        }
-                        try {
-                            invSummary += isToJSON(toDrop);
-                        } catch (Exception e) {
-                            // TODO: handle exception
-                            plugin.getLogger().severe(e.getMessage());
-                            e.printStackTrace();
-                        }
-
 						// Put it in chest0 first
 						if(i < chest0size) {
 							chest0inv.addItem(toDrop);
@@ -182,11 +183,11 @@ public class DeathEvent implements Listener {
                             plugin.getLogger().severe("Should have dropped " + toDrop.getAmount() + "x " + toDrop.getType() + " but didn't");
                         }
 					}
-                    invSummary += "]";
 					
 					// Tell the player where they died
 					inChest = chest0count + chest1count;
-					String msg = "[DeathChest] I put " + inChest + pluralize(inChest, " item") + " (" + (chest0stacks + chest1stacks) + pluralize(chest0stacks + chest1stacks, " stack") + ") in a chest";
+					inChestStacks = chest0stacks + chest1stacks;
+					String msg = "[DeathChest] I put " + inChest + pluralize(inChest, " item") + " (" + (inChestStacks) + pluralize(inChestStacks, " stack") + ") in a chest";
 					if(dropCount > 0) {
 						msg += " and dropped " + dropCount + pluralize(dropCount, " item")+ " (" + dropStacks + pluralize(dropStacks, " stack") +")";
 					}
@@ -199,15 +200,19 @@ public class DeathEvent implements Listener {
 					msg += " soon.";
 					p.sendMessage(msg);
 				} else {
+					// Actually drop the items
+					for(ItemStack toDrop : is) {
+						loc.getWorld().dropItem(loc, toDrop);
+					}
 					// Tell the player where they died if there is no chest
-					String msg = "Not air, no chest. I dropped your " + pluralize(dropCount, "item") + " at " + 
+					String msg = "Not air, no chest. I dropped your " + pluralize(dropCount, "item") + " at " +
 							loc.getBlockX() + ", " + loc.getBlockY() + ", " + loc.getBlockZ() + ".";
 					p.sendMessage(msg);
 				}
 			}
 			
 			// Log the death location to the server log
-			String msg = p.getName() + " had died at " + loc.getBlockX() + ", "
+			String msg = p.getName() + " had died at " + loc.getWorld().getName() + " " + loc.getBlockX() + ", "
 					+ loc.getBlockY() + ", " + loc.getBlockZ();
 			if(chest0count > 0 || dropCount > 0) {
 					msg = msg + ", and I have";
@@ -219,7 +224,7 @@ public class DeathEvent implements Listener {
 						}
 					}
 					if(dropCount > 0) {
-						msg = msg + " dropped " + dropCount + pluralize(dropCount, " item");
+						msg = msg + " dropped " + dropCount + pluralize(dropCount, " item") + " (" + dropStacks + pluralize(dropStacks, " stack") +")";
 					}
 					msg = msg + " there.";
 			} else {
@@ -228,9 +233,29 @@ public class DeathEvent implements Listener {
 			plugin.getLogger().log(Level.INFO, msg);
 			
 			// Log the death location to a file
-			String dta = date + " " + loc.getBlockX() + " " + loc.getBlockY() + " " + loc.getBlockZ() + invSummary;
+            String dta = date + " " +
+                    loc.getWorld().getName() + " " +
+                    loc.getBlockX() + " " +
+                    loc.getBlockY() + " " +
+                    loc.getBlockZ() + " ";
+			if(inChestStacks > 0 || dropStacks > 0) {
+				dta += "(";
+					if(inChestStacks > 0) {
+						dta += "C:" + inChest + "i " + inChestStacks + "s";
+					}
+					if(dropStacks > 0) {
+						if(inChestStacks > 0) {
+							dta += " ";
+						}
+						dta += "D:" + dropCount + "i " + dropStacks + "s";
+					}
+				dta += ") ";
+                dta += "[" + invSummary + "]";
+			} else {
+				dta += "no items";
+			}
 			saveData(p.getName(), p.getUniqueId(), dta);
-		}, 1);
+		}, 1); // NOTE: this may cause deaths on the last tick the server is running to behave erratically
 	}
 	
 	private void saveData(String name, UUID uuid, String data) {
